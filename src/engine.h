@@ -53,4 +53,5 @@ private:
     size_t m_prevBatchSize = 0;
     std::string m_engineName;
     cudaStream_t m_cudaStream = nullptr;
+    std::unordered_map<int, int> m_optProfIndx;
 };

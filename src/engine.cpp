@@ -97,7 +97,11 @@ bool Engine::build(std::string onnxModelPath) {
     defaultProfile->setDimensions(inputName, OptProfileSelector::kMAX, Dims4(m_options.maxBatchSize, inputC, inputH, inputW));
     config->addOptimizationProfile(defaultProfile);
 
+    m_optProfIndx.insert(std::pair<int, int>{1, 0});
+
     // Specify all the optimization profiles.
+    int profIdx = 1;
+
     for (const auto& optBatchSize: m_options.optBatchSizes) {
         if (optBatchSize == 1) {
             continue;
@@ -112,6 +116,8 @@ bool Engine::build(std::string onnxModelPath) {
         profile->setDimensions(inputName, OptProfileSelector::kOPT, Dims4(optBatchSize, inputC, inputH, inputW));
         profile->setDimensions(inputName, OptProfileSelector::kMAX, Dims4(m_options.maxBatchSize, inputC, inputH, inputW));
         config->addOptimizationProfile(profile);
+
+        m_optProfIndx.insert(std::pair<int, int>{optBatchSize, profIdx++});
     }
 
     config->setMaxWorkspaceSize(m_options.maxWorkspaceSize);
@@ -214,6 +220,15 @@ bool Engine::runInference(const std::vector<cv::Mat> &inputFaceChips, std::vecto
         m_outputBuff.deviceBuffer.resize(outputDims);
 
         m_prevBatchSize = batchSize;
+
+        // Determine if the batch size is in our optimization profile
+        auto it = m_optProfIndx.find(batchSize);
+        if (it != m_optProfIndx.end()) {
+//             Switch the optimization profile
+            m_context->setOptimizationProfileAsync(it->second, m_cudaStream);
+        }
+        std::cout << "The binding index is: " << m_engine->getBindingIndex("input") << std::endl;
+        m_context->setBindingDimensions(m_engine->getBindingIndex("input"), inputDims);
     }
 
     auto* hostDataBuffer = static_cast<float*>(m_inputBuff.hostBuffer.data());
