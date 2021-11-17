@@ -25,7 +25,7 @@ int main() {
         throw std::runtime_error("Unable to load TRT engine.");
     }
 
-    std::vector<size_t> batchSizes = {2, 3, 4, 6, 8};
+    std::vector<size_t> batchSizes = {1, 2, 3, 4, 6, 8};
     std::vector<std::vector<cv::Mat>> images;
 
 
@@ -50,8 +50,7 @@ int main() {
     size_t numIterations = 100;
 
     for (size_t i = 0; i < numIterations; ++i) {
-        auto testIdx = numIterations % images.size();
-
+        auto testIdx = i % images.size();
         auto t1 = Clock::now();
         featureVectors.clear();
         engine.runInference(images[testIdx], featureVectors);

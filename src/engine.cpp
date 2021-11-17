@@ -97,11 +97,7 @@ bool Engine::build(std::string onnxModelPath) {
     defaultProfile->setDimensions(inputName, OptProfileSelector::kMAX, Dims4(m_options.maxBatchSize, inputC, inputH, inputW));
     config->addOptimizationProfile(defaultProfile);
 
-    m_optProfIndx.insert(std::pair<int, int>{1, 0});
-
     // Specify all the optimization profiles.
-    int profIdx = 1;
-
     for (const auto& optBatchSize: m_options.optBatchSizes) {
         if (optBatchSize == 1) {
             continue;
@@ -116,8 +112,6 @@ bool Engine::build(std::string onnxModelPath) {
         profile->setDimensions(inputName, OptProfileSelector::kOPT, Dims4(optBatchSize, inputC, inputH, inputW));
         profile->setDimensions(inputName, OptProfileSelector::kMAX, Dims4(m_options.maxBatchSize, inputC, inputH, inputW));
         config->addOptimizationProfile(profile);
-
-        m_optProfIndx.insert(std::pair<int, int>{optBatchSize, profIdx++});
     }
 
     config->setMaxWorkspaceSize(m_options.maxWorkspaceSize);
@@ -164,6 +158,8 @@ bool Engine::loadNetwork() {
     if (!file.read(buffer.data(), size)) {
         throw std::runtime_error("Unable to read engine file");
     }
+
+    readOptProfileIdx(m_engineName, m_optProfIdx);
 
     std::unique_ptr<IRuntime> runtime{createInferRuntime(m_logger)};
     if (!runtime) {
@@ -222,8 +218,8 @@ bool Engine::runInference(const std::vector<cv::Mat> &inputFaceChips, std::vecto
         m_prevBatchSize = batchSize;
 
         // Determine if the batch size is in our optimization profile
-        auto it = m_optProfIndx.find(batchSize);
-        if (it != m_optProfIndx.end()) {
+        auto it = m_optProfIdx.find(batchSize);
+        if (it != m_optProfIdx.end()) {
 //             Switch the optimization profile
             m_context->setOptimizationProfileAsync(it->second, m_cudaStream);
         }
@@ -296,6 +292,27 @@ bool Engine::runInference(const std::vector<cv::Mat> &inputFaceChips, std::vecto
     }
 
     return true;
+}
+
+void Engine::readOptProfileIdx(const std::string& modelName, std::unordered_map<int, int>& optProfIdx) {
+    optProfIdx.insert({1, 0});
+
+    auto prefix = modelName.substr(0, modelName.find_last_of('.'));
+    auto optProfiles = prefix.substr(prefix.find_last_of('.') + 1, prefix.size());
+
+    if (optProfiles.empty()) {
+        std::cout << "No optimization profiles specified" << std::endl;
+        return;
+    }
+
+    std::stringstream ss(optProfiles);
+    std::string segment;
+
+    int profIdx = 1;
+    while(std::getline(ss, segment, '_')) {
+        int batchSize = atoi( segment.c_str());
+        optProfIdx.insert({ batchSize, profIdx++});
+    }
 }
 
 std::string Engine::serializeEngineOptions(const Options &options) {
