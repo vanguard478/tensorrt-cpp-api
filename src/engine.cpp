@@ -222,9 +222,15 @@ bool Engine::runInference(const std::vector<cv::Mat> &inputFaceChips, std::vecto
         if (it != m_optProfIdx.end()) {
 //             Switch the optimization profile
             m_context->setOptimizationProfileAsync(it->second, m_cudaStream);
+            m_profileIdx = it->second;
         }
-        std::cout << "The binding index is: " << m_engine->getBindingIndex("input") << std::endl;
-        m_context->setBindingDimensions(m_engine->getBindingIndex("input"), inputDims);
+        std::string inputTensorName = "input [profile " + std::to_string(m_profileIdx) + "]";
+        if (m_profileIdx == 0) {
+            m_context->setBindingDimensions(0, inputDims);
+        } else {
+            auto bindingIdx = m_engine->getBindingIndex(inputTensorName.c_str());
+            m_context->setBindingDimensions(bindingIdx, inputDims);
+        }
     }
 
     auto* hostDataBuffer = static_cast<float*>(m_inputBuff.hostBuffer.data());
@@ -274,7 +280,6 @@ bool Engine::runInference(const std::vector<cv::Mat> &inputFaceChips, std::vecto
         std::cout << "Unable to copy buffer from GPU back to CPU" << std::endl;
         return false;
     }
-
     ret = cudaStreamSynchronize(m_cudaStream);
     if (ret != 0) {
         std::cout << "Unable to synchronize cuda stream" << std::endl;
